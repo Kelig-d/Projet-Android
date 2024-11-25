@@ -12,6 +12,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import com.example.projetandroid.ui.theme.ProjetAndroidTheme
+import java.net.URL
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -32,6 +33,8 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun Greeting(name: String, modifier: Modifier = Modifier) {
+    val ApiResponse = URL("https://gcpa-enssat-24-25.s3.eu-west-3.amazonaws.com/playlist.json").readText()
+    val json:Moshi =Moshi
     Text(
         text = "Hello $name!",
         modifier = modifier
