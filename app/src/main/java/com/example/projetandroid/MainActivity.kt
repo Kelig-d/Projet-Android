@@ -4,7 +4,6 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -13,13 +12,14 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.example.projetandroid.ui.theme.ProjetAndroidTheme
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.Types
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.net.URL
 
@@ -52,7 +52,7 @@ suspend fun ReadPlaylist(): List<Song> {
 @Composable
 fun DisplayPlaylist() {
     var songs by remember { mutableStateOf<List<Song>>(emptyList()) }
-    var showPlaylist by remember { mutableStateOf(false) }
+    // var showPlaylist by remember { mutableStateOf(false) }
     var selectedSong by remember { mutableStateOf<Song?>(null) }
     var expanded by remember { mutableStateOf(false) }  // Pour ouvrir/fermer le menu déroulant
 
@@ -101,6 +101,19 @@ fun DisplayPlaylist() {
             selectedSong?.let { song ->
                 Spacer(modifier = Modifier.height(16.dp))
                 Text("Vous avez sélectionné : ${song.name} par ${song.artist}")
+                val lyricsUrl = "https://gcpa-enssat-24-25.s3.eu-west-3.amazonaws.com/${song.path}"
+                try{
+                    CoroutineScope(Dispatchers.IO).launch {
+                        val temp = URL(lyricsUrl)
+                        val lyricsText = temp.readText()
+                        val parsedLyrics = LyricParser(lyricsText)
+                        println(parsedLyrics)
+                    }
+                }
+                catch (e: Exception){
+                    println(e)
+                }
+
             }
         }
     }
