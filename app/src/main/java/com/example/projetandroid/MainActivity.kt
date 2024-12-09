@@ -22,6 +22,17 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.net.URL
+import androidx.compose.ui.platform.LocalContext
+import android.net.Uri
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.ui.PlayerView
+import androidx.compose.ui.viewinterop.AndroidView
+
+var URL_MASTER = "https://gcpa-enssat-24-25.s3.eu-west-3.amazonaws.com/"
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -36,7 +47,7 @@ class MainActivity : ComponentActivity() {
 
 suspend fun ReadPlaylist(): List<Song> {
     return withContext(Dispatchers.IO) { // Effectuer les opérations réseau en arrière-plan
-        val playlistJsonFile = URL("https://gcpa-enssat-24-25.s3.eu-west-3.amazonaws.com/playlist.json").readText()
+        val playlistJsonFile = URL(URL_MASTER+"playlist.json").readText()
 
         val moshi = Moshi.Builder()
             .add(KotlinJsonAdapterFactory()) // Permet à Moshi de gérer les classes Kotlin
@@ -101,7 +112,7 @@ fun DisplayPlaylist() {
             selectedSong?.let { song ->
                 Spacer(modifier = Modifier.height(16.dp))
                 Text("Vous avez sélectionné : ${song.name} par ${song.artist}")
-                val lyricsUrl = "https://gcpa-enssat-24-25.s3.eu-west-3.amazonaws.com/${song.path}"
+                val lyricsUrl = URL_MASTER+song.path
                 try{
                     CoroutineScope(Dispatchers.IO).launch {
                         val temp = URL(lyricsUrl)
@@ -114,7 +125,48 @@ fun DisplayPlaylist() {
                     println(e)
                 }
 
+                // Gestion des cas pour le chemin de la musique
+                val songPath = if (!song.path.isNullOrBlank()) {
+                    song.path.replace(".md", ".mp3")
+                } else {
+                    null // Ou une valeur par défaut si nécessaire
+                }
+
+                // Vérifie que songPath n'est pas vide
+                songPath?.let {
+                    MusicPlayer(it)
+                } ?: run {
+                    println("Le chemin de la chanson est invalide.")
+                }
+
             }
         }
     }
+}
+
+@Composable
+fun MusicPlayer(songPath: String, modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+
+    val songurl = URL_MASTER+songPath
+    // Crée une instance d'ExoPlayer
+    val exoPlayer = remember {
+        ExoPlayer.Builder(context).build().apply {
+            setMediaItem(androidx.media3.common.MediaItem.fromUri(Uri.parse(songurl)))
+            prepare()
+        }
+    }
+
+    // Libère ExoPlayer lorsque le composable est détruit
+    DisposableEffect(Unit) {
+        onDispose {
+            exoPlayer.release()
+        }
+    }
+
+    // Afficher l'interface utilisateur de PlayerView
+    AndroidView(
+        modifier = modifier.fillMaxWidth(),
+        factory = { PlayerView(context).apply { player = exoPlayer } }
+    )
 }
