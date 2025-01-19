@@ -32,7 +32,6 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.media3.common.MediaItem
-import androidx.media3.common.util.Log
 import androidx.media3.exoplayer.ExoPlayer
 import com.example.projetandroid.ui.theme.ProjetAndroidTheme
 import com.squareup.moshi.Moshi
@@ -173,9 +172,10 @@ fun MusicPlayer(
 ) {
     val context = LocalContext.current
     val songUrl = URL_MASTER + songPath
-    var lyricsIndex = remember { mutableStateOf(0) } // Utilisation de remember pour garder l'état de l'index
+    val lyricsIndex =
+        remember { mutableIntStateOf(0) } // Utilisation de remember pour garder l'état de l'index
     var currentLyrics by remember { mutableStateOf<List<Lyric>?>(null) } // Les paroles actuelles
-    var lyricsProgress by remember { mutableStateOf(0f) } // Suivi de la progression des paroles
+    var lyricsProgress by remember { mutableFloatStateOf(0f) } // Suivi de la progression des paroles
 
     // Utilisation de 'remember' pour maintenir l'instance ExoPlayer sur les changements de chanson
     val exoPlayer = remember { ExoPlayer.Builder(context).build() }
@@ -215,15 +215,15 @@ fun MusicPlayer(
                     val currentPosition = exoPlayer.currentPosition
 
                     // Vérifier si nous devons changer l'index des paroles
-                    if (lyricsIndex.value < parsedLyrics.lyrics.size &&
-                        currentPosition >= parsedLyrics.lyrics[lyricsIndex.value][0].startOffset &&
-                        currentPosition <= parsedLyrics.lyrics[lyricsIndex.value].last().endOffset
+                    if (lyricsIndex.intValue < parsedLyrics.lyrics.size &&
+                        currentPosition >= parsedLyrics.lyrics[lyricsIndex.intValue][0].startOffset &&
+                        currentPosition <= parsedLyrics.lyrics[lyricsIndex.intValue].last().endOffset
                     ) {
-                        currentLyrics = parsedLyrics.lyrics[lyricsIndex.value]
+                        currentLyrics = parsedLyrics.lyrics[lyricsIndex.intValue]
                     }
 
                     // Mettre à jour l'index des paroles lorsque la chanson passe à la suivante
-                    if (currentPosition >= parsedLyrics.lyrics[lyricsIndex.value].last().endOffset) {
+                    if (currentPosition >= parsedLyrics.lyrics[lyricsIndex.intValue].last().endOffset) {
                         lyricsIndex.value += 1
                         currentLyrics = null
                     }
@@ -267,7 +267,13 @@ fun MusicPlayer(
             }) {
                 Text(if (isPlaying) "Pause" else "Play")
             }
-            Button(onClick = { exoPlayer.seekTo((exoPlayer.currentPosition + 5000).coerceAtMost(exoPlayer.duration)) }) {
+            Button(onClick = {
+                exoPlayer.seekTo(
+                    (exoPlayer.currentPosition + 5000).coerceAtMost(
+                        exoPlayer.duration
+                    )
+                )
+            }) {
                 Text("+5s")
             }
         }
@@ -283,44 +289,38 @@ fun MusicPlayer(
 
         Text("Temps actuel : ${currentTime / 1000}s", style = TextStyle(fontSize = 16.sp))
 
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .horizontalScroll(rememberScrollState()),
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
         )
-    {
-        currentLyrics?.let {
-            if (parsedLyrics != null) {
-                if(currentLyrics!!.size>1){
-                    currentLyrics!!.forEachIndexed { index, lyric ->
-                        var toWait = 0f
-                        try{
-                            val subLyrics = currentLyrics!!.subList(0,index)
-                            subLyrics.forEach { subLyr->
-                                toWait +=(subLyr?.endOffset ?: 0f) - (subLyr?.startOffset?: 0f)
+        {
+            currentLyrics?.let {
+                if (parsedLyrics != null) {
+                    if (currentLyrics!!.size > 1) {
+                        currentLyrics!!.forEachIndexed { index, lyric ->
+                            var toWait = 0f
+                            try {
+                                val subLyrics = currentLyrics!!.subList(0, index)
+                                subLyrics.forEach { subLyr ->
+                                    toWait += subLyr.endOffset - subLyr.startOffset
+                                }
+                            } catch (_: Exception) {
+                                println("bug")
                             }
+                            KaraokeText(lyric, toWait = toWait)
                         }
-                        catch (_:Exception){
-                            println("bug")
-                        }
-                        KaraokeText(lyric, toWait = toWait)
-                    }
 
-                }
-                else {
-                    currentLyrics!!.forEach { lyric ->
-                        KaraokeText(lyric)
+                    } else {
+                        currentLyrics!!.forEach { lyric ->
+                            KaraokeText(lyric)
+                        }
                     }
                 }
             }
         }
     }
 }
-
-
-
-
-
 
 @Composable
 fun HighlightedTextWithMask(fullText: String, progress: Float, textStyle: TextStyle = TextStyle(fontSize = 24.sp)) {
