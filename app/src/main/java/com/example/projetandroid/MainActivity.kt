@@ -18,6 +18,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -171,17 +172,40 @@ fun MusicPlayer(
 ) {
     val context = LocalContext.current
     val songUrl = URL_MASTER + songPath
-    var lyricsIndex = 0
+    val lyricsIndex =
+        remember { mutableIntStateOf(0) } // Utilisation de remember pour garder l'état de l'index
+    var currentLyrics by remember { mutableStateOf<List<Lyric>?>(null) } // Les paroles actuelles
+    var lyricsProgress by remember { mutableFloatStateOf(0f) } // Suivi de la progression des paroles
 
-    // State pour afficher le texte
-    var currentLyrics by remember { mutableStateOf<List<Lyric?>?>(null) }
-    val exoPlayer = remember {
-        ExoPlayer.Builder(context).build().apply {
-            setMediaItem(MediaItem.fromUri(Uri.parse(songUrl)))
-            prepare()
-            playWhenReady = true
+    // Utilisation de 'remember' pour maintenir l'instance ExoPlayer sur les changements de chanson
+    val exoPlayer = remember { ExoPlayer.Builder(context).build() }
+
+    // State pour garder une trace de l'URL de la chanson actuelle
+    var currentSongUrl by remember { mutableStateOf(songUrl) }
+
+    // Une fois une chanson sélectionnée, on prépare et lance la musique
+    LaunchedEffect(songUrl) {
+        // Réinitialiser les paroles à chaque nouvelle chanson
+        currentLyrics = null // Réinitialisation des paroles
+        lyricsProgress = 0f // Réinitialiser la progression des paroles
+
+        // Si l'URL de la chanson a changé, on reconfigure ExoPlayer mais on ne le libère pas
+        if (currentSongUrl != songUrl) {
+            exoPlayer.stop()  // Arrêter la musique avant de préparer une nouvelle chanson
+            exoPlayer.release()
         }
+
+        exoPlayer.setMediaItem(MediaItem.fromUri(Uri.parse(songUrl)))
+        exoPlayer.prepare()
+        exoPlayer.playWhenReady = true // Lancer immédiatement la lecture
+
+        // Mettre à jour l'URL actuelle pour éviter de reconfigurer le player inutilement
+        currentSongUrl = songUrl
     }
+
+    var isPlaying by remember { mutableStateOf(true) }
+    var currentProgress by remember { mutableStateOf(0f) }
+    var currentTime by remember { mutableStateOf(0L) }
 
     DisposableEffect(Unit) {
         val handler = Handler(Looper.getMainLooper())
@@ -189,17 +213,27 @@ fun MusicPlayer(
             override fun run() {
                 if (parsedLyrics != null) {
                     val currentPosition = exoPlayer.currentPosition
-                    if(currentPosition >= parsedLyrics.lyrics[lyricsIndex][0].startOffset && currentPosition <= parsedLyrics.lyrics[lyricsIndex].last().endOffset)
-                        currentLyrics = parsedLyrics.lyrics[lyricsIndex]
-                    if(currentPosition >= parsedLyrics.lyrics[lyricsIndex].last().endOffset && lyricsIndex <parsedLyrics.lyrics.size){
-                        lyricsIndex+=1
+
+                    // Vérifier si nous devons changer l'index des paroles
+                    if (lyricsIndex.intValue < parsedLyrics.lyrics.size &&
+                        currentPosition >= parsedLyrics.lyrics[lyricsIndex.intValue][0].startOffset &&
+                        currentPosition <= parsedLyrics.lyrics[lyricsIndex.intValue].last().endOffset
+                    ) {
+                        currentLyrics = parsedLyrics.lyrics[lyricsIndex.intValue]
+                    }
+
+                    // Mettre à jour l'index des paroles lorsque la chanson passe à la suivante
+                    if (currentPosition >= parsedLyrics.lyrics[lyricsIndex.intValue].last().endOffset) {
+                        lyricsIndex.value += 1
                         currentLyrics = null
                     }
 
+                    // Mettre à jour la progression
+                    currentTime = exoPlayer.currentPosition
+                    currentProgress = exoPlayer.currentPosition / exoPlayer.duration.toFloat()
+
+                    handler.postDelayed(this, 100)
                 }
-
-
-                handler.postDelayed(this, 100)
             }
         }
         handler.post(runnable)
@@ -210,40 +244,82 @@ fun MusicPlayer(
         }
     }
 
+    // Composant UI pour la lecture de la musique
     Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .horizontalScroll(rememberScrollState()),
-        )
-    {
-        currentLyrics?.let {
-            if (parsedLyrics != null) {
-                if(currentLyrics!!.size>1){
-                    currentLyrics!!.forEachIndexed { index, lyric ->
-                        var toWait = 0f
-                        try{
-                            val subLyrics = currentLyrics!!.subList(0,index)
-                            subLyrics.forEach { subLyr->
-                                toWait +=(subLyr?.endOffset ?: 0f) - (subLyr?.startOffset?: 0f)
-                            }
-                        }
-                        catch (_:Exception){
-                            println("bug")
-                        }
-                        KaraokeText(lyric, toWait = toWait)
-                    }
-
+        modifier = Modifier.fillMaxWidth(),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Button(onClick = { exoPlayer.seekTo((exoPlayer.currentPosition - 5000).coerceAtLeast(0)) }) {
+                Text("-5s")
+            }
+            Button(onClick = {
+                isPlaying = if (isPlaying) {
+                    exoPlayer.pause()
+                    false
+                } else {
+                    exoPlayer.play()
+                    true
                 }
-                else {
-                    currentLyrics!!.forEach { lyric ->
-                        KaraokeText(lyric)
+            }) {
+                Text(if (isPlaying) "Pause" else "Play")
+            }
+            Button(onClick = {
+                exoPlayer.seekTo(
+                    (exoPlayer.currentPosition + 5000).coerceAtMost(
+                        exoPlayer.duration
+                    )
+                )
+            }) {
+                Text("+5s")
+            }
+        }
+
+        Slider(
+            value = currentProgress,
+            onValueChange = { newValue ->
+                currentProgress = newValue
+                exoPlayer.seekTo((newValue * exoPlayer.duration).toLong())
+            },
+            modifier = Modifier.fillMaxWidth(0.8f)
+        )
+
+        Text("Temps actuel : ${currentTime / 1000}s", style = TextStyle(fontSize = 16.sp))
+
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
+        )
+        {
+            currentLyrics?.let {
+                if (parsedLyrics != null) {
+                    if (currentLyrics!!.size > 1) {
+                        currentLyrics!!.forEachIndexed { index, lyric ->
+                            var toWait = 0f
+                            try {
+                                val subLyrics = currentLyrics!!.subList(0, index)
+                                subLyrics.forEach { subLyr ->
+                                    toWait += subLyr.endOffset - subLyr.startOffset
+                                }
+                            } catch (_: Exception) {
+                                println("bug")
+                            }
+                            KaraokeText(lyric, toWait = toWait)
+                        }
+
+                    } else {
+                        currentLyrics!!.forEach { lyric ->
+                            KaraokeText(lyric)
+                        }
                     }
                 }
             }
         }
     }
-
-
 }
 
 @Composable
@@ -255,11 +331,13 @@ fun HighlightedTextWithMask(fullText: String, progress: Float, textStyle: TextSt
                 textSize = textStyle.fontSize.value * density
                 typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
             }
+
             // Mesurer la largeur totale du texte
             val textWidth = paint.measureText(fullText)
 
             // Calculer la largeur de la partie colorée
             val colorWidth = textWidth * progress
+
             // Créer le masque avec un dégradé dynamique
             val shader = LinearGradient(
                 0f, 0f, textWidth, 0f,
