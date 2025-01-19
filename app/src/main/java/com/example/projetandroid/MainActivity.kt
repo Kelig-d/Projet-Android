@@ -138,13 +138,10 @@ fun DisplayPlaylist( onParsedLyricsAvailable: (LyricParser) -> Unit) {
                 // Charger les paroles si elles ne sont pas déjà disponibles
                 LaunchedEffect(song.path) {
                     val lyricsUrl = URL_MASTER + song.path
-                    parsedLyrics = null
                     try {
                         withContext(Dispatchers.IO) { // Opérations réseau sur un thread IO
-                            println("DG-Keith : Récupération parole ${lyricsUrl}")
                             val lyricsText = URL(lyricsUrl).readText()
                             parsedLyrics = LyricParser(lyricsText)
-                            println("DG-Keith : Paroles récupérés ${parsedLyrics}")
                         }
                         onParsedLyricsAvailable(parsedLyrics!!)
                     } catch (e: Exception) {
@@ -155,10 +152,8 @@ fun DisplayPlaylist( onParsedLyricsAvailable: (LyricParser) -> Unit) {
                 // Gestion des cas pour le chemin de la musique
                 val songPath = song.path?.replace(".md", ".mp3")
                 songPath?.let {
-                    println("DG-Keith : Chemin des paroles ${songPath}")
                     // Appeler MusicPlayer uniquement si parsedLyrics est disponible
                     if (parsedLyrics != null) {
-                        println("DG-Keith : Parseur lyrics $parsedLyrics")
                         MusicPlayer(it, parsedLyrics)
                     } else {
                         Text("Chargement des paroles...")
@@ -170,7 +165,6 @@ fun DisplayPlaylist( onParsedLyricsAvailable: (LyricParser) -> Unit) {
         }
     }
 }
-
 
 @Composable
 fun MusicPlayer(
@@ -246,6 +240,7 @@ fun MusicPlayer(
 
         onDispose {
             handler.removeCallbacks(runnable)
+            exoPlayer.release()
         }
     }
 
@@ -288,17 +283,34 @@ fun MusicPlayer(
 
         Text("Temps actuel : ${currentTime / 1000}s", style = TextStyle(fontSize = 16.sp))
 
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState()),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            currentLyrics?.let {
-                currentLyrics!!.forEach { lyric ->
-                    //println("DG-Keith : $lyric")
-                    KaraokeText(lyric)
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState()),
+        )
+    {
+        currentLyrics?.let {
+            if (parsedLyrics != null) {
+                if(currentLyrics!!.size>1){
+                    currentLyrics!!.forEachIndexed { index, lyric ->
+                        var toWait = 0f
+                        try{
+                            val subLyrics = currentLyrics!!.subList(0,index)
+                            subLyrics.forEach { subLyr->
+                                toWait +=(subLyr?.endOffset ?: 0f) - (subLyr?.startOffset?: 0f)
+                            }
+                        }
+                        catch (_:Exception){
+                            println("bug")
+                        }
+                        KaraokeText(lyric, toWait = toWait)
+                    }
+
+                }
+                else {
+                    currentLyrics!!.forEach { lyric ->
+                        KaraokeText(lyric)
+                    }
                 }
             }
         }
@@ -344,26 +356,27 @@ fun HighlightedTextWithMask(fullText: String, progress: Float, textStyle: TextSt
 }
 
 @Composable
-fun KaraokeText(lyric: Lyric?) {
-    println("Les paroles test $lyric")
-    if (lyric != null) {
+fun KaraokeText(lyric: Lyric?, toWait: Float = 0f) {
+    if(lyric != null){
+        val totalDuration = (lyric.endOffset - lyric.startOffset)
+
         var progress by remember { mutableFloatStateOf(0f) }
-
-        val totalDuration = (lyric.endOffset - lyric.startOffset).toFloat()
-        val lyricDuration = totalDuration / 100f  // Pour une mise à jour plus fluide
-
-        LaunchedEffect(lyric.startOffset) {
-            // Calculer la progression en fonction du temps de la chanson
+        LaunchedEffect(Unit) {
+            progress = - toWait / totalDuration
             while (progress < 1f) {
-                delay((lyricDuration).toLong())
                 progress += 0.01f
+                delay((totalDuration/100).toLong())
             }
         }
 
-        // Mise à jour de la fonction HighlightedTextWithMask pour afficher les paroles avec un effet de progression
         HighlightedTextWithMask(
             fullText = lyric.sentence,
             progress = progress
         )
     }
+
 }
+
+
+
+
