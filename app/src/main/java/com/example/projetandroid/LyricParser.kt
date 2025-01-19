@@ -1,36 +1,50 @@
 package com.example.projetandroid
 
-import androidx.compose.animation.core.StartOffset
-
 
 class LyricParser(fileContent: String) {
-    lateinit var lyrics:List<List<Lyric>>
+    var lyrics:List<List<Lyric>> = listOf()
+    val information: MutableMap<String, String> = mutableMapOf()
     init {
         val lyricList = fileContent.lines()
         if(lyricList[0] == "SingWithMe"){
-            val lyricsStart = lyricList.indexOfFirst { it.startsWith("{") }
-            val lyricContentInfo: MutableMap<String, String> = mutableMapOf()
-            for(i in 1..<lyricsStart-1 step 2){
-                if(lyricList[i].startsWith("#")) lyricContentInfo[lyricList[i].drop(2)] = lyricList[i+1]
-            }
-            val r = Regex("""(?=((\{ ?\d+:\d+:?\d+ ?\})([^\n{]+)\n?(\{ ?\d+:?\d+ ?\}\n?)))""")
-            val lyricsList:MutableList<Lyric> = mutableListOf()
-            r.findAll(fileContent).forEachIndexed { i,v ->
-                val groups = v.groups
-                lyricsList.add(Lyric(groups[2]?.value ?: "", groups[3]?.value ?: "", groups[4]?.value?: "", toreunite = groups[1]?.value?.contains("\n") == false))
-            }
-            val reunifiedLyrics:MutableList<MutableList<Lyric>> = mutableListOf()
-            var flag:Boolean = false
-            lyricsList.forEach{
-                if(!flag) {
-                    reunifiedLyrics.add(mutableListOf(it))
+            try {
+                val lyricsStart = lyricList.indexOfFirst { it.startsWith("# lyrics") } + 1
+                if(lyricsStart == 0) throw IllegalArgumentException()
+                for (i in 1..<lyricsStart - 1 step 2) {
+                    if (lyricList[i].startsWith("#")) information[lyricList[i].drop(2)] =
+                        lyricList[i + 1]
                 }
-                else{
-                    reunifiedLyrics.last().add(it)
+                val r = Regex("""(?=((\{ ?\d+:\d+:?\d+ ?\})([^\n{]+)\n?(\{ ?\d+:?\d+ ?\}\n?)))""")
+                val lyricsList: MutableList<Lyric> = mutableListOf()
+                r.findAll(fileContent).forEachIndexed { _, v ->
+                    val groups = v.groups
+                    lyricsList.add(
+                        Lyric(
+                            groups[2]?.value ?: "",
+                            groups[3]?.value ?: "",
+                            groups[4]?.value ?: "",
+                            toreunite = groups[1]?.value?.contains("\n") == false
+                        )
+                    )
                 }
-                flag = it.toreunite
+                val reunifiedLyrics: MutableList<MutableList<Lyric>> = mutableListOf()
+                var flag = false
+                lyricsList.forEach {
+                    if (!flag) {
+                        reunifiedLyrics.add(mutableListOf(it))
+                    } else {
+                        reunifiedLyrics.last().add(it)
+                    }
+                    flag = it.toreunite
+                }
+                this.lyrics = reunifiedLyrics
             }
-            this.lyrics = reunifiedLyrics
+            catch (e: IllegalArgumentException){
+                throw e
+            }
+        }
+        else{
+            throw IllegalArgumentException()
         }
     }
 }
