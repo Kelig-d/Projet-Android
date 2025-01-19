@@ -210,17 +210,34 @@ fun MusicPlayer(
         }
     }
 
-    Row(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
             .horizontalScroll(rememberScrollState()),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
+        )
+    {
         currentLyrics?.let {
             if (parsedLyrics != null) {
-                currentLyrics!!.forEach { lyric ->
-                    KaraokeText(lyric)
+                if(currentLyrics!!.size>1){
+                    currentLyrics!!.forEachIndexed { index, lyric ->
+                        var toWait = 0f
+                        try{
+                            val subLyrics = currentLyrics!!.subList(0,index)
+                            subLyrics.forEach { subLyr->
+                                toWait +=(subLyr?.endOffset ?: 0f) - (subLyr?.startOffset?: 0f)
+                            }
+                        }
+                        catch (_:Exception){
+                            println("bug")
+                        }
+                        KaraokeText(lyric, toWait = toWait)
+                    }
+
+                }
+                else {
+                    currentLyrics!!.forEach { lyric ->
+                        KaraokeText(lyric)
+                    }
                 }
             }
         }
@@ -238,13 +255,11 @@ fun HighlightedTextWithMask(fullText: String, progress: Float, textStyle: TextSt
                 textSize = textStyle.fontSize.value * density
                 typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
             }
-
             // Mesurer la largeur totale du texte
             val textWidth = paint.measureText(fullText)
 
             // Calculer la largeur de la partie colorée
             val colorWidth = textWidth * progress
-
             // Créer le masque avec un dégradé dynamique
             val shader = LinearGradient(
                 0f, 0f, textWidth, 0f,
@@ -263,12 +278,13 @@ fun HighlightedTextWithMask(fullText: String, progress: Float, textStyle: TextSt
 }
 
 @Composable
-fun KaraokeText(lyric: Lyric?) {
+fun KaraokeText(lyric: Lyric?, toWait: Float = 0f) {
     if(lyric != null){
-        var progress by remember { mutableFloatStateOf(0f) }
-
         val totalDuration = (lyric.endOffset - lyric.startOffset)
+
+        var progress by remember { mutableFloatStateOf(0f) }
         LaunchedEffect(Unit) {
+            progress = - toWait / totalDuration
             while (progress < 1f) {
                 progress += 0.01f
                 delay((totalDuration/100).toLong())
@@ -282,5 +298,7 @@ fun KaraokeText(lyric: Lyric?) {
     }
 
 }
+
+
 
 
